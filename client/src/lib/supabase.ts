@@ -98,3 +98,12 @@ export const SORT_OPTIONS = [
   { value: 'price:desc', label: 'Highest Amount' },
   { value: 'price:asc', label: 'Lowest Amount' }
 ];
+
+// Date filter options for the transactions table
+export const DATE_FILTERS = [
+  { value: 'all', label: 'All Time' },
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'this_week', label: 'This Week' },
+  { value: 'this_month', label: 'This Month' }
+];

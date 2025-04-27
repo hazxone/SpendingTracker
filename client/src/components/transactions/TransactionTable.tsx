@@ -13,6 +13,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { EditTransactionDialog } from "./EditTransactionDialog";
-import { formatCurrency, formatDate, formatTime, getCategoryBadgeClasses, CATEGORIES, SORT_OPTIONS } from "@/lib/supabase";
+import { formatCurrency, formatDate, formatTime, getCategoryBadgeClasses, CATEGORIES, SORT_OPTIONS, DATE_FILTERS } from "@/lib/supabase";
 import { type Transaction } from "@shared/schema";
 
 interface TransactionsResponse {
@@ -43,12 +44,14 @@ interface TransactionsResponse {
     limit: number;
     pages: number;
   };
+  filteredTotal: number;
 }
 
 export function TransactionTable() {
   // State for filters and pagination
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date:desc");
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -59,13 +62,14 @@ export function TransactionTable() {
   
   // Query for transactions with filters
   const { data, isLoading } = useQuery<TransactionsResponse>({
-    queryKey: ['/api/transactions', { search, category, sortBy, page, limit }],
+    queryKey: ['/api/transactions', { search, category, dateFilter, sortBy, page, limit }],
     queryFn: async ({ queryKey }) => {
       const [_, params] = queryKey as [string, any];
       const searchParams = new URLSearchParams();
       
       if (params.search) searchParams.append('search', params.search);
-      if (params.category) searchParams.append('category', params.category);
+      if (params.category && params.category !== 'all') searchParams.append('category', params.category);
+      if (params.dateFilter && params.dateFilter !== 'all') searchParams.append('dateFilter', params.dateFilter);
       if (params.sortBy) searchParams.append('sortBy', params.sortBy);
       if (params.page) searchParams.append('page', params.page.toString());
       if (params.limit) searchParams.append('limit', params.limit.toString());
@@ -183,7 +187,7 @@ export function TransactionTable() {
               </div>
               <div className="relative">
                 <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary h-10 w-[160px]">
+                  <SelectTrigger className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary h-10 w-[140px]">
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
                   <SelectContent>
@@ -197,8 +201,22 @@ export function TransactionTable() {
                 </Select>
               </div>
               <div className="relative">
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary h-10 w-[140px]">
+                    <SelectValue placeholder="Date Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DATE_FILTERS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="relative">
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary h-10 w-[160px]">
+                  <SelectTrigger className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary h-10 w-[140px]">
                     <SelectValue placeholder="Sort By" />
                   </SelectTrigger>
                   <SelectContent>
@@ -307,40 +325,47 @@ export function TransactionTable() {
           </Table>
         </div>
         
-        {data && data.pagination.pages > 1 && (
-          <div className="px-4 py-3 border-t border-slate-200 sm:px-6">
-            <div className="flex items-center justify-between">
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-slate-700">
-                    Showing <span className="font-medium">{(data.pagination.page - 1) * data.pagination.limit + 1}</span> to <span className="font-medium">
-                      {Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)}
-                    </span> of <span className="font-medium">{data.pagination.total}</span> transactions
+        <div className="px-4 py-3 border-t border-slate-200 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between">
+            {data && (
+              <div className="mb-2 sm:mb-0">
+                <p className="text-sm text-slate-700">
+                  Showing <span className="font-medium">{data.transactions.length > 0 ? (data.pagination.page - 1) * data.pagination.limit + 1 : 0}</span> to <span className="font-medium">
+                    {Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)}
+                  </span> of <span className="font-medium">{data.pagination.total}</span> transactions
+                </p>
+                {/* Display filtered total if filters are applied */}
+                {((category && category !== 'all') || (dateFilter && dateFilter !== 'all') || search) && (
+                  <p className="text-sm font-medium text-slate-900 mt-1">
+                    Filtered Total: <span className="text-emerald-600 font-bold">{formatCurrency(data.filteredTotal)}</span>
                   </p>
-                </div>
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        className={page === 1 ? "pointer-events-none opacity-50" : ""}
-                        onClick={() => handlePageChange(Math.max(1, page - 1))}
-                      />
-                    </PaginationItem>
-                    
-                    {renderPaginationLinks()}
-                    
-                    <PaginationItem>
-                      <PaginationNext
-                        className={page === data.pagination.pages ? "pointer-events-none opacity-50" : ""}
-                        onClick={() => handlePageChange(Math.min(data.pagination.pages, page + 1))}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
+                )}
               </div>
-            </div>
+            )}
+            
+            {data && data.pagination.pages > 1 && (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      className={page === 1 ? "pointer-events-none opacity-50" : ""}
+                      onClick={() => handlePageChange(Math.max(1, page - 1))}
+                    />
+                  </PaginationItem>
+                  
+                  {renderPaginationLinks()}
+                  
+                  <PaginationItem>
+                    <PaginationNext
+                      className={page === data.pagination.pages ? "pointer-events-none opacity-50" : ""}
+                      onClick={() => handlePageChange(Math.min(data.pagination.pages, page + 1))}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
           </div>
-        )}
+        </div>
       </Card>
       
       {/* Edit Transaction Dialog */}
