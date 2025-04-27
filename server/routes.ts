@@ -11,17 +11,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get transactions with optional filtering and pagination
   app.get('/api/transactions', async (req: Request, res: Response) => {
     try {
-      const { search, category, sortBy, page, limit } = req.query;
+      const { search, category, sortBy, page, limit, dateFilter } = req.query;
       
       const filters = {
         search: search as string | undefined,
         category: category as string | undefined,
         sortBy: sortBy as string | undefined,
+        dateFilter: dateFilter as string | undefined,
         page: page ? parseInt(page as string) : 1,
         limit: limit ? parseInt(limit as string) : 10
       };
       
       const result = await storage.getTransactions(undefined, filters);
+      
+      // Calculate the total sum of the filtered transactions
+      const filteredTotal = result.transactions.reduce(
+        (sum, transaction) => sum + Number(transaction.price), 
+        0
+      );
       
       res.json({
         transactions: result.transactions,
@@ -30,7 +37,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           page: filters.page,
           limit: filters.limit,
           pages: Math.ceil(result.totalCount / filters.limit)
-        }
+        },
+        filteredTotal: parseFloat(filteredTotal.toFixed(2))
       });
     } catch (error) {
       console.error("Error fetching transactions:", error);

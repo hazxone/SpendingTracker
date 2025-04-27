@@ -27,6 +27,7 @@ export interface IStorage {
     search?: string;
     category?: string;
     sortBy?: string;
+    dateFilter?: string;
     page?: number;
     limit?: number;
   }): Promise<{ transactions: Transaction[]; totalCount: number }>;
@@ -72,6 +73,7 @@ export class DbStorage implements IStorage {
     search?: string;
     category?: string;
     sortBy?: string;
+    dateFilter?: string;
     page?: number;
     limit?: number;
   }): Promise<{ transactions: Transaction[]; totalCount: number }> {
@@ -96,6 +98,47 @@ export class DbStorage implements IStorage {
     if (filters?.search) {
       whereConditions.push(`items ILIKE $${paramIndex++}`);
       queryParams.push(`%${filters.search}%`);
+    }
+    
+    // Add date filter if provided
+    if (filters?.dateFilter) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (filters.dateFilter === 'today') {
+        const todayStr = format(today, 'yyyy-MM-dd');
+        whereConditions.push(`date_only = $${paramIndex++}`);
+        queryParams.push(todayStr);
+      }
+      else if (filters.dateFilter === 'yesterday') {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = format(yesterday, 'yyyy-MM-dd');
+        whereConditions.push(`date_only = $${paramIndex++}`);
+        queryParams.push(yesterdayStr);
+      }
+      else if (filters.dateFilter === 'this_week') {
+        // Get the first day of the current week (Sunday)
+        const firstDayOfWeek = new Date(today);
+        const dayOfWeek = today.getDay();
+        firstDayOfWeek.setDate(today.getDate() - dayOfWeek);
+        
+        const firstDayStr = format(firstDayOfWeek, 'yyyy-MM-dd');
+        const todayStr = format(today, 'yyyy-MM-dd');
+        
+        whereConditions.push(`date_only >= $${paramIndex++} AND date_only <= $${paramIndex++}`);
+        queryParams.push(firstDayStr, todayStr);
+      }
+      else if (filters.dateFilter === 'this_month') {
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        const firstDayStr = format(firstDayOfMonth, 'yyyy-MM-dd');
+        const lastDayStr = format(lastDayOfMonth, 'yyyy-MM-dd');
+        
+        whereConditions.push(`date_only >= $${paramIndex++} AND date_only <= $${paramIndex++}`);
+        queryParams.push(firstDayStr, lastDayStr);
+      }
     }
     
     const whereClause = whereConditions.length > 0 
@@ -449,6 +492,7 @@ export class MemStorage implements IStorage {
     search?: string;
     category?: string;
     sortBy?: string;
+    dateFilter?: string;
     page?: number;
     limit?: number;
   }): Promise<{ transactions: Transaction[]; totalCount: number }> {
@@ -470,6 +514,47 @@ export class MemStorage implements IStorage {
       filteredTransactions = filteredTransactions.filter(t => 
         t.items.toLowerCase().includes(searchLower)
       );
+    }
+    
+    // Apply date filter
+    if (filters?.dateFilter) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (filters.dateFilter === 'today') {
+        const todayStr = format(today, 'yyyy-MM-dd');
+        filteredTransactions = filteredTransactions.filter(t => {
+          return format(new Date(t.dateOnly), 'yyyy-MM-dd') === todayStr;
+        });
+      }
+      else if (filters.dateFilter === 'yesterday') {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = format(yesterday, 'yyyy-MM-dd');
+        filteredTransactions = filteredTransactions.filter(t => {
+          return format(new Date(t.dateOnly), 'yyyy-MM-dd') === yesterdayStr;
+        });
+      }
+      else if (filters.dateFilter === 'this_week') {
+        // Get the first day of the current week (Sunday)
+        const firstDayOfWeek = new Date(today);
+        const dayOfWeek = today.getDay();
+        firstDayOfWeek.setDate(today.getDate() - dayOfWeek);
+        
+        filteredTransactions = filteredTransactions.filter(t => {
+          const transDate = new Date(t.dateOnly);
+          return transDate >= firstDayOfWeek && transDate <= today;
+        });
+      }
+      else if (filters.dateFilter === 'this_month') {
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        filteredTransactions = filteredTransactions.filter(t => {
+          const transDate = new Date(t.dateOnly);
+          return transDate >= firstDayOfMonth && transDate <= lastDayOfMonth;
+        });
+      }
     }
     
     // Get total count before pagination
